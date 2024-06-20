@@ -1,0 +1,17 @@
+# Ignorer tous les fichiers par défaut
+*
+
+# Ne pas ignorer le fichier .gitignore lui-même
+!.gitignore
+
+# Ne pas ignorer le dossier Code
+!Code/
+
+# Ignorer tout dans Code par défaut
+Code/*
+
+# Ne pas ignorer le dossier src dans Code
+!Code/src/
+
+# Ne pas ignorer les fichiers dans Code/src
+!Code/src/*
