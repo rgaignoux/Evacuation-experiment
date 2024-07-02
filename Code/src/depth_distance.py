@@ -170,5 +170,3 @@ finally:
     pipe.stop()
 
 
-img = cv2.imread('C:\\Users\\Robin\\Pictures\\test.png')
-ellipses = cv2.ximgproc.findEllipses(img)

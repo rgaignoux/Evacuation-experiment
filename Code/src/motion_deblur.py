@@ -43,7 +43,7 @@ if __name__ == '__main__':
     img = np.float32(img)/255.0
     cv2.imshow('input', img)
 
-    img = blur_edge(img)
+    #img = blur_edge(img)
     IMG = cv2.dft(img, flags=cv2.DFT_COMPLEX_OUTPUT)
 
     defocus = '--circle' in opts
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         res = np.roll(res, -kw//2, 1)
 
         cv2.imshow(win, res)
-        cv2.imwrite("color_images\\unblured_images\deconvolution.png",res*255)
+        cv2.imwrite("C:\\Users\Robin\Documents\Stage2024\Code\images\color_images\\unblured_images\deconvolution.png",res*255)
         
 
     cv2.namedWindow(win)
