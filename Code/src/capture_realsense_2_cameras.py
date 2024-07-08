@@ -93,10 +93,10 @@ class RecorderApp:
         dev1 = ctx.query_devices()[1]
 
         # Configure both streams
-        self.pipeline1 = rs.pipeline()
+        self.pipeline1 = rs.pipeline(ctx)
         config1 = rs.config()
 
-        self.pipeline2 = rs.pipeline()
+        self.pipeline2 = rs.pipeline(ctx)
         config2 = rs.config()
 
         config1.enable_device(dev0.get_info(rs.camera_info.serial_number))
@@ -108,6 +108,10 @@ class RecorderApp:
         config2.enable_stream(rs.stream.color, self.width, self.height, rs.format.bgr8, self.color_fps)
         config2.enable_stream(rs.stream.depth, self.width, self.height, rs.format.z16, self.depth_fps)
         config2.enable_record_to_file(output_path2)
+
+        dev0.first_depth_sensor().set_option(rs.option.output_trigger_enabled, 1.0)
+        dev0.first_depth_sensor().set_option(rs.option.inter_cam_sync_mode, 1) # master
+        dev1.first_depth_sensor().set_option(rs.option.inter_cam_sync_mode, 2) # slave
 
         # Start streaming for both streams
         profile1 = self.pipeline1.start(config1)
@@ -124,13 +128,17 @@ class RecorderApp:
         # Set auto exposure for both streams
         depth_sensor1 = profile1.get_device().query_sensors()[0]
         color_sensor1 = profile1.get_device().query_sensors()[1]
-        depth_sensor1.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
-        color_sensor1.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        #depth_sensor1.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        #color_sensor1.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        depth_sensor1.set_option(rs.option.exposure, 8500)
+        color_sensor1.set_option(rs.option.exposure, 150)
 
         depth_sensor2 = profile2.get_device().query_sensors()[0]
         color_sensor2 = profile2.get_device().query_sensors()[1]
-        depth_sensor2.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
-        color_sensor2.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        #depth_sensor2.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        #color_sensor2.set_option(rs.option.enable_auto_exposure, self.auto_exposure)
+        depth_sensor2.set_option(rs.option.exposure, 8500)
+        color_sensor2.set_option(rs.option.exposure, 150)
 
         # Mannually set the exposure : .set_option(rs.option.exposure, exposure)
 
