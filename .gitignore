@@ -16,14 +16,8 @@ Code/*
 # Ne pas ignorer les fichiers dans Code/src
 !Code/src/*
 
-# Ne pas ignorer le dossier src dans Code
+# Ne pas ignorer le dossier src2 dans Code
 !Code/src2/
 
-# Ne pas ignorer les fichiers dans Code/src
-!Code/src2/*
-
-# Ne pas ignorer le dossier camera_settings dans Code/
-!Code/camera_settings/
-
-# Ne pas ignorer les fichiers dans Code/camera_settings
-!Code/camera_settings/*
+# Ne pas ignorer tous les dossiers et fichiers dans Code/src2
+!Code/src2/**
