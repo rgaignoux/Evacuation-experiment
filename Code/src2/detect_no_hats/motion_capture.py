@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog
 import cv2
 import numpy as np
+from scipy.ndimage import center_of_mass
 
 def post_process_depth_frame(depth_frame, min_distance=0, max_distance=3.0, decimation_magnitude = 1.0, spatial_magnitude = 2.0, spatial_smooth_alpha = 0.5, spatial_smooth_delta = 20, temporal_smooth_alpha = 0.4, temporal_smooth_delta = 20):
     # Post processing possible only on the depth_frame
@@ -78,9 +79,12 @@ colorizer = rs.colorizer(2)
 wait_key = 1
 frame_shape = (848, 480)
 
+# Background mask
 background = np.ones((480, 848), np.uint8) * 1
 cv2.rectangle(background,(0,0),(210,250), 0,-1)
 
+# Ids of the heads
+heads_id = {}
 
 try:
     while True:
@@ -93,17 +97,22 @@ try:
         # Motion detection
         gray = cv2.cvtColor(depth_color_image,cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (35, 35), 0)
-        frameDelta = gray * background
+        gray *= background # Remove the background
 
-        depth_images_merged = []
+        # List contaning the images of the detected heads and their features in the current frame
+        head_features = []
+
+        # Set match_found to False for all heads
+        for id, value in heads_id.items():
+            head_image, height, center, area, _ = value
+            heads_id[id] = (head_image, height, center, area, False)
 
         # Find the contours
-        _,thresh = cv2.threshold(frameDelta,128,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _,thresh = cv2.threshold(gray,128,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         contours, _ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 
         for contour in contours:
             area = cv2.contourArea(contour)
-            #print("Area: ", area)
 
             if area > 2000:
                 x,y,w,h = cv2.boundingRect(contour)
@@ -125,32 +134,132 @@ try:
                     continue
 
                 # Post process the depth frame to keep only the head (between min_distance and min_distance + 0.1)
-                depth_frame_pp2  = post_process_height(depth_frame, min_distance=min_distance, max_distance=min_distance + 0.1)
-                depth_color_frame2 = colorizer.colorize(depth_frame_pp2)
-                depth_color_image2 = np.asanyarray(depth_color_frame2.get_data())
-                mask = np.zeros_like(depth_color_image2)
+                depth_frame_head  = post_process_height(depth_frame, min_distance=min_distance, max_distance=min_distance + 0.15)
+                depth_color_frame_head = colorizer.colorize(depth_frame_head)
+                depth_color_image_head = np.asanyarray(depth_color_frame_head.get_data())
+
+                # Apply the bounding box mask
+                mask = np.zeros_like(depth_color_image_head)
                 cv2.rectangle(mask,(x,y),(x+w,y+h),(255,255,255),-1)
-                depth_color_image2 = cv2.bitwise_and(depth_color_image2, mask)
-                depth_color_image_gray = cv2.cvtColor(depth_color_image2, cv2.COLOR_BGR2GRAY)
+                depth_color_image_head = cv2.bitwise_and(depth_color_image_head, mask)
                 
-                # Find center of mass
-                mass_x, mass_y = np.where(depth_color_image_gray > 0)
-                cent_x = np.average(mass_x)
-                cent_y = np.average(mass_y)
-                center = (int(cent_y), int(cent_x))
-                cv2.circle(depth_color_image2, center, 5, (0, 0, 255), -1)
+                # Binarize the image
+                head_image = cv2.inRange(depth_color_image_head, (1, 1, 1), (255, 255, 255))
 
-                depth_images_merged.append(depth_color_image2)
+                # Smooth the edges by applying median filter
+                head_image = cv2.medianBlur(head_image, 15)
+  
+                center = center_of_mass(head_image)
+                center = (int(center[1]), int(center[0]))
 
-        # Merge all frames in the list depth_images_pp
-        merged_image = np.zeros_like(depth_color_image)
-        for img in depth_images_merged:
-            merged_image = cv2.add(merged_image, img)
+                # Recalculate the area
+                contours, _ = cv2.findContours(head_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contour = contours[0]
+                area = cv2.contourArea(contour)
 
-        depth_color_image = cv2.resize(depth_color_image, (0, 0), fx=0.75, fy=0.75)
-        merged_image = cv2.resize(merged_image, (0, 0), fx=0.75, fy=0.75)
-        images = np.hstack((depth_color_image, merged_image))
-        cv2.imshow('images',images)
+                head_features.append((head_image, max_height, center, area))
+
+        # Match the heads found with the ids
+        for head_image, height, center, area in head_features:
+            match_percentages = {}
+
+            for id, value in heads_id.items():
+                m_head_image, m_height, m_center, m_area, m_match_found = value
+                if m_match_found:
+                    continue
+                
+                no_pos = False
+                if m_center == (-1, -1):
+                    no_pos = True
+                
+                if not no_pos:
+                    pos_diff = np.linalg.norm(np.array(m_center) - np.array(center))
+                area_diff = abs(m_area - area)
+                height_diff = abs(m_height - max_height)
+
+                # Set the maximum difference for each feature
+                max_pos_diff = 75
+                max_area_diff = 1500
+                max_height_diff = 0.1
+
+                if pos_diff > max_pos_diff or area_diff > max_area_diff or height_diff > max_height_diff:
+                    continue
+
+                # Normalize
+                if not no_pos:
+                    pos_diff /= max_pos_diff
+                area_diff /= max_area_diff
+                height_diff /= max_height_diff
+
+                match_percentage = 0
+
+                # With pos : match percentage : 80% of the position, 10% of the area, 10% of the height
+                if not no_pos:
+                    match_percentage = 1 - (0.6 * pos_diff + 0.1 * area_diff + 0.2 * height_diff)
+                
+                # No pos : match percentage : 20% of the area, 80% of the height
+                if no_pos:
+                    match_percentage = 1 - (0.2 * area_diff + 0.8 * height_diff)
+
+                match_percentages[id] = match_percentage
+
+
+            # If too close to border, set pos to (-1, -1)
+            border = 50
+            if center[0] < border or center[1] < border or center[0] > frame_shape[0] - border or center[1] > frame_shape[1] - border:
+                center = (-1, -1)
+
+            # Find max match
+            max_match = (-1, -1)
+            if len(match_percentages) > 0:
+                # Find max value and the key in the dictionary
+                id = max(match_percentages, key=match_percentages.get)
+                percentage = match_percentages[id]
+                max_match = (id, percentage)
+                print(f'Current height : {height:.2f}, Area : {area:.2f}, Max match : {id}, {percentage:.2f}')
+
+                # If the max match is above 0.6, associate the head with the id
+                if max_match[1] > 0.6:
+                    _, _, actual_center, _, _ = heads_id[id]
+                    if not actual_center == (-1, -1):
+                        heads_id[id] = (head_image, height, center, area, True)
+
+                else:
+                    # Else, create a new id
+                    if not center == (-1, -1):
+                        id = len(heads_id)
+                        heads_id[id] = (head_image, height, center, area, True)
+
+            elif len(match_percentages) == 0:
+                if not center == (-1, -1):
+                    # Create the first id
+                    id = 0
+                    heads_id[id] = (head_image, height, center, area, True)
+
+                
+
+                
+
+
+        for id, value in heads_id.items():
+            print('------------------------')
+            print(f'ID: {id}, Height: {value[1]:.2f} m, Center: {value[2]}, Area: {value[3]}')
+            print('------------------------')
+
+        # Draw the height and the center of the head
+        for head_image, height, center, area, _ in heads_id.values():
+            if center == (-1, -1):
+                continue
+            cv2.circle(depth_color_image, center, 5, (0, 255, 0), -1)
+            cv2.putText(depth_color_image, f'{height:.2f} m', center, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        # Merge all head images
+        heads_image = np.zeros((frame_shape[1], frame_shape[0]), np.uint8)
+        for head_image, _, _, _, _ in heads_id.values():
+            heads_image = cv2.add(heads_image, head_image)
+
+        cv2.imshow('Motion Detection', heads_image)
+        cv2.imshow('Depth', depth_color_image)
         key = cv2.waitKey(wait_key)
 
         if key == ord('q'):
