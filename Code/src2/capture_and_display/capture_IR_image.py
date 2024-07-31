@@ -10,22 +10,22 @@ def select_path():
     path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
     return path
 
-def capture_IR_image(serial_number):
-    path = select_path()
+def capture_IR_image(serial_number, path):
+    #path = select_path()
     print("Selected path:", path)
 
     pipe = rs.pipeline()
     cfg = rs.config()
     cfg.enable_device(serial_number)
-    cfg.enable_stream(rs.stream.infrared, 1, 848, 480, rs.format.y8, 30)
+    cfg.enable_stream(rs.stream.infrared, 1, 848, 480, rs.format.y8, 6)
     profile = pipe.start(cfg)
     depth_sensor = profile.get_device().first_depth_sensor()
-    depth_sensor.set_option(rs.option.exposure, 4000)
+    depth_sensor.set_option(rs.option.exposure, 7000)
 
     frames = pipe.wait_for_frames()
 
     # Pass 50 frames to allow the camera to adjust brightness
-    for i in range(50):
+    for i in range(30):
         frames = pipe.wait_for_frames()
 
     infrared_frame = frames.get_infrared_frame()
@@ -36,7 +36,9 @@ def capture_IR_image(serial_number):
     print("Image saved to", path)
 
 serial_number1 = "815412070753"
-capture_IR_image(serial_number1)
+path = select_path()
+capture_IR_image(serial_number1, path)
 
-serial_number2 = "815412070846"
-capture_IR_image(serial_number2)
+# serial_number2 = "815412070846"
+# path = "22.png"
+# capture_IR_image(serial_number2, path)

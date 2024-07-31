@@ -1,18 +1,19 @@
 import pyrealsense2 as rs
 import numpy as np
-import time
+import matplotlib.pyplot as plt
 import open3d as o3d
 import numpy as np
+import time
 from post_process import post_process_depth_frame
 
 # Camera settings
 width = 640
 height = 480
-fps = 30
+fps = 15
 
 # Translation / Rotation values
-distance_cameras = -2.6
-angles_cameras = -22
+distance_cameras = -2.56
+angles_cameras = -25
 
 def visualize(pcd):
     viewer = o3d.visualization.VisualizerWithEditing()
@@ -50,7 +51,12 @@ def crop_body(pcd_front, pcd_back, distance_cameras, angle_cameras):
     body_center = np.array([0, 0, -1.2])
     center_bbox_min = body_center - np.array([0.5, 0, 0.5])
     center_bbox_max = body_center + np.array([0.5, 0, 0.5])
-    center_bbox_min[1] = entire_bbox.min_bound[1]
+
+    # Compute y_min as the first percentile in case the actual min_bound is an outlier
+    y_values = np.asarray(pcd.points)[:, 1]
+    y_min = np.percentile(y_values, 1)
+
+    center_bbox_min[1] = y_min + 0.18 # 0.18 to remove the floor
     center_bbox_max[1] = entire_bbox.max_bound[1]
 
     # Crop the body
@@ -58,6 +64,22 @@ def crop_body(pcd_front, pcd_back, distance_cameras, angle_cameras):
     body = pcd.crop(center_bbox)
 
     return body
+
+def project_to_xz_plane(pcd):
+    # Get points from the point cloud
+    points = np.asarray(pcd.points)
+    
+    # Set Y coordinate to 0
+    points[:, 1] = 0
+    
+    # Update point cloud with new points
+    pcd.points = o3d.utility.Vector3dVector(points)
+
+    # Remove outliers
+    cl, ind = pcd.remove_radius_outlier(nb_points=16, radius=0.03)
+    pcd = pcd.select_by_index(ind)
+    
+    return pcd
 
 def create_pipeline(serial_number):
     # Create a pipeline
@@ -71,51 +93,54 @@ def create_pipeline(serial_number):
     # Start streaming
     profile = pipeline.start(config)
 
+    # Set emitter enabled to "laser"
+    device = profile.get_device()
+    depth_sensor = device.first_depth_sensor()
+    depth_sensor.set_option(rs.option.emitter_enabled, 1)
+
+    # Use Medium Density preset
+    depth_sensor.set_option(rs.option.visual_preset, 5)
+
+    # Set manual exposure to 5000
+    depth_sensor.set_option(rs.option.exposure, 5000)
+
     return pipeline
 
 def save_ply(path, pipe):
-    # We'll use the colorizer to generate texture for our PLY
-    # (alternatively, texture can be obtained from color or infrared stream)
-    colorizer = rs.colorizer()
-
     try:
         # Wait for the next set of frames from the camera
         frames = pipe.wait_for_frames()
-        colorized = colorizer.process(frames)
+        depth_frame = frames.get_depth_frame()
+        depth_frame = post_process_depth_frame(depth_frame, min_distance=0, max_distance=3, temporal_smooth_alpha=0.2, temporal_smooth_delta=40)
 
         # Create save_to_ply object
         ply = rs.save_to_ply(path)
-
         print("Saving PLY to ", path)
-        # Apply the processing block to the frameset which contains the depth frame and the texture
-        ply.process(colorized)
+        ply.process(depth_frame)
         print("Done")
     finally:
-        pipe.stop()
+        pipe.stop() 
 
-front_pipe = create_pipeline("815412070753")
-back_pipe = create_pipeline("815412070846")
+# back_pipe = create_pipeline("815412070753")
+# front_pipe = create_pipeline("815412070846")
 
-# Wait for auto-exposure to stabilize
-for x in range(50):
-    front_pipe.wait_for_frames()
-    back_pipe.wait_for_frames()
+# # Wait 5 seconds
+# for i in range(5):
+#     print("Capture will start in ", 5-i, " seconds")
+#     time.sleep(1)
 
-# Wait 5 seconds
-for i in range(5):
-    print("Capture will start in ", 5-i, " seconds")
-    time.sleep(1)
-
-# Save the PLY files
-save_ply("front.ply", front_pipe)
-save_ply("back.ply", back_pipe)
+# # Save the PLY files
+# save_ply("front.ply", front_pipe)
+# save_ply("back.ply", back_pipe)
 
 # Load front point cloud
-pcd_front = o3d.io.read_point_cloud("front.ply")
+pcd_front = o3d.io.read_point_cloud("C:\\Users\\Robin\\Documents\\Stage2024\\Code\\body_scans\\2_cameras\\walking\\not_facing_cameras\\front.ply")
 pcd_front = pcd_front.uniform_down_sample(every_k_points=5)
 
 # Load back point cloud
-pcd_back = o3d.io.read_point_cloud("back.ply")
+
+#pcd_back = o3d.io.read_point_cloud("back.ply")
+pcd_back = o3d.io.read_point_cloud("C:\\Users\\Robin\\Documents\\Stage2024\\Code\\body_scans\\2_cameras\\walking\\not_facing_cameras\\back.ply")
 pcd_back = pcd_back.uniform_down_sample(every_k_points=5)
 
 # Remove outliers and visualize
@@ -123,12 +148,42 @@ cl, ind = pcd_front.remove_radius_outlier(nb_points=16, radius=0.05)
 pcd_front = pcd_front.select_by_index(ind)
 visualize(pcd_front)
 
-cl, ind = pcd_back.remove_radius_outlier(nb_points=16, radius=0.05)
+cl, ind = pcd_back.remove_radius_outlier(nb_points=8, radius=0.05)
 pcd_back = pcd_back.select_by_index(ind)
 visualize(pcd_back)
 
 body = crop_body(pcd_front, pcd_back, distance_cameras, angles_cameras)
 visualize(body)
+o3d.io.write_point_cloud("body.ply", body)
+
+# Project the body to the XZ plane
+ground_projection = project_to_xz_plane(body)
+visualize(ground_projection)
+
+# Get bounding box
+body_bbox = ground_projection.get_axis_aligned_bounding_box()
+body_dimensions = body_bbox.get_max_bound() - body_bbox.get_min_bound()
+print("Body dimensions: ", body_dimensions)
+
+points = np.asarray(ground_projection.points)
+    
+# Extract X and Z coordinates
+x = points[:, 0]
+z = points[:, 2]
+
+# Create the plot
+plt.figure(figsize=(10, 10))
+plt.scatter(x, z, s=0.5, c='b', marker='o')
+plt.title('2D Projection on XZ Plane')
+plt.xlabel('X')
+plt.ylabel('Z')
+plt.grid(True)
+plt.axis('equal')  # Equal scaling for both axes
+
+# Save the plot to a file
+plt.savefig("projection.png", dpi=300)
+plt.close()
+
 
 
 

@@ -102,20 +102,29 @@ try:
         # List contaning the images of the detected heads and their features in the current frame
         head_features = []
 
+        # List containing the images of the detected heads in the current frame
+        head_images = []
+
         # Set match_found to False for all heads
         for id, value in heads_id.items():
-            head_image, height, center, area, _ = value
-            heads_id[id] = (head_image, height, center, area, False)
+            height, center, area, _ = value
+            heads_id[id] = (height, center, area, False)
 
         # Find the contours
         _,thresh = cv2.threshold(gray,128,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         contours, _ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+
+        nb_heads = 0
 
         for contour in contours:
             area = cv2.contourArea(contour)
 
             if area > 2000:
                 x,y,w,h = cv2.boundingRect(contour)
+                border = 10
+                # If the head is too close to the border, ignore it
+                if x < border or y < border or x+w > frame_shape[0] - border or y+h > frame_shape[1] - border:
+                    continue
                 
                 # Find the max height in the bounding box
                 max_height = 0
@@ -149,117 +158,89 @@ try:
                 # Smooth the edges by applying median filter
                 head_image = cv2.medianBlur(head_image, 15)
   
-                center = center_of_mass(head_image)
-                center = (int(center[1]), int(center[0]))
+                # Find center of mass
+                mass_y, mass_x = np.where(head_image > 0)
+                if mass_x.size == 0 or mass_y.size == 0:
+                    continue
+                cent_x = np.average(mass_x)
+                cent_y = np.average(mass_y)
+                center = (int(cent_x), int(cent_y))
 
                 # Recalculate the area
                 contours, _ = cv2.findContours(head_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 contour = contours[0]
                 area = cv2.contourArea(contour)
 
-                head_features.append((head_image, max_height, center, area))
+                head_features.append((max_height, center, area))
+                head_images.append(head_image)
+                nb_heads += 1
+
+                
 
         # Match the heads found with the ids
-        for head_image, height, center, area in head_features:
+        nb_matches = 0
+
+        for height, center, area in head_features:
             match_percentages = {}
 
             for id, value in heads_id.items():
-                m_head_image, m_height, m_center, m_area, m_match_found = value
+                m_height, m_center, m_area, m_match_found = value
                 if m_match_found:
                     continue
+
+                #print(f'Candidate: Head: {height:.2f} m, {center}, {area}, ID: {id}, {m_height:.2f} m, {m_center}, {m_area}')
                 
-                no_pos = False
-                if m_center == (-1, -1):
-                    no_pos = True
-                
-                if not no_pos:
-                    pos_diff = np.linalg.norm(np.array(m_center) - np.array(center))
+                pos_diff = np.linalg.norm(np.array(m_center) - np.array(center))
                 area_diff = abs(m_area - area)
                 height_diff = abs(m_height - max_height)
 
                 # Set the maximum difference for each feature
-                max_pos_diff = 75
-                max_area_diff = 1500
-                max_height_diff = 0.1
+                max_pos_diff = 100
+                max_area_diff = 2000
+                max_height_diff = 0.15
 
                 if pos_diff > max_pos_diff or area_diff > max_area_diff or height_diff > max_height_diff:
                     continue
 
                 # Normalize
-                if not no_pos:
-                    pos_diff /= max_pos_diff
-                area_diff /= max_area_diff
-                height_diff /= max_height_diff
+                match_percentages[id] = pos_diff
 
-                match_percentage = 0
-
-                # With pos : match percentage : 80% of the position, 10% of the area, 10% of the height
-                if not no_pos:
-                    match_percentage = 1 - (0.6 * pos_diff + 0.1 * area_diff + 0.2 * height_diff)
-                
-                # No pos : match percentage : 20% of the area, 80% of the height
-                if no_pos:
-                    match_percentage = 1 - (0.2 * area_diff + 0.8 * height_diff)
-
-                match_percentages[id] = match_percentage
-
-
-            # If too close to border, set pos to (-1, -1)
-            border = 50
-            if center[0] < border or center[1] < border or center[0] > frame_shape[0] - border or center[1] > frame_shape[1] - border:
-                center = (-1, -1)
+            print(f'Match percentages: {match_percentages}')
 
             # Find max match
-            max_match = (-1, -1)
             if len(match_percentages) > 0:
                 # Find max value and the key in the dictionary
-                id = max(match_percentages, key=match_percentages.get)
-                percentage = match_percentages[id]
-                max_match = (id, percentage)
-                print(f'Current height : {height:.2f}, Area : {area:.2f}, Max match : {id}, {percentage:.2f}')
+                id = min(match_percentages, key=match_percentages.get)
+                heads_id[id] = (max_height, center, area, True)
+                nb_matches += 1
 
-                # If the max match is above 0.6, associate the head with the id
-                if max_match[1] > 0.6:
-                    _, _, actual_center, _, _ = heads_id[id]
-                    if not actual_center == (-1, -1):
-                        heads_id[id] = (head_image, height, center, area, True)
+            else:
+                # Else, create a new id
+                new_id = len(heads_id)
+                heads_id[new_id] = (height, center, area, True)
 
-                else:
-                    # Else, create a new id
-                    if not center == (-1, -1):
-                        id = len(heads_id)
-                        heads_id[id] = (head_image, height, center, area, True)
-
-            elif len(match_percentages) == 0:
-                if not center == (-1, -1):
-                    # Create the first id
-                    id = 0
-                    heads_id[id] = (head_image, height, center, area, True)
-
-                
-
-                
-
+        if nb_heads != nb_matches:
+            print(f'Number of heads detected: {nb_heads}, Number of matches: {nb_matches}')
 
         for id, value in heads_id.items():
             print('------------------------')
-            print(f'ID: {id}, Height: {value[1]:.2f} m, Center: {value[2]}, Area: {value[3]}')
+            print(f'ID: {id}, Height: {value[0]:.2f} m, Center: {value[1]}, Area: {value[2]}')
             print('------------------------')
 
         # Draw the height and the center of the head
-        for head_image, height, center, area, _ in heads_id.values():
-            if center == (-1, -1):
-                continue
+        for id, value in heads_id.items():
+            height, center, area, _ = value
             cv2.circle(depth_color_image, center, 5, (0, 255, 0), -1)
-            cv2.putText(depth_color_image, f'{height:.2f} m', center, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(depth_color_image, f'ID: {id}', center, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
         # Merge all head images
         heads_image = np.zeros((frame_shape[1], frame_shape[0]), np.uint8)
-        for head_image, _, _, _, _ in heads_id.values():
-            heads_image = cv2.add(heads_image, head_image)
+        for img in head_images:
+            heads_image = cv2.add(heads_image, img)
 
-        cv2.imshow('Motion Detection', heads_image)
-        cv2.imshow('Depth', depth_color_image)
+        cv2.imshow('Motion detected', gray)
+        cv2.imshow('Heads detected', heads_image)
+        cv2.imshow('Tracking', depth_color_image)
         key = cv2.waitKey(wait_key)
 
         if key == ord('q'):
