@@ -21,7 +21,7 @@ def draw_axes(img, origin, xyz_axes):
 
 
 # Camera 1 intrinsics : serial_number1 = "815412070753"
-fx, fy, ppx, ppy = 423.786, 423.786, 424.541, 240.722
+fx, fy, ppx, ppy = 383.806, 383.806, 320.490, 240.654
 cameraMatrix1 = np.array([
     [fx, 0,  ppx],
     [0,  fy, ppy],
@@ -30,7 +30,7 @@ cameraMatrix1 = np.array([
 distCoeffs1 = np.array([0,0,0,0,0], dtype=np.float32)
 
 # Camera 2 intrinsics : serial_number2 = "815412070846"
-fx, fy, ppx, ppy = 422.674, 422.674, 421.141, 234.282
+fx, fy, ppx, ppy = 382.799, 382.799, 317.411, 234.821
 cameraMatrix2 = np.array([
     [fx, 0,  ppx],
     [0,  fy, ppy],
@@ -48,8 +48,8 @@ objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
 axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
 
 # Load images
-path1 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\test\\new\\1_1.png"
-path2 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\test\\new\\2_1.png"
+path1 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\angles_test\\1.png"
+path2 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\angles_test\\2.png"
 img1 = cv2.imread(path1, cv2.IMREAD_GRAYSCALE)
 img2 = cv2.imread(path2, cv2.IMREAD_GRAYSCALE)
 
@@ -154,6 +154,7 @@ print("Distance between the two cameras in cam2 system:", distance_cm)
 y = abs(center1_in_cam2[1])
 z = abs(center1_in_cam2[2])
 theta = - np.arctan(y/z)
+theta = -27 * np.pi / 180
 print("Theta angle:", np.degrees(theta))
 R_x = np.array([
         [1, 0, 0],
@@ -183,6 +184,35 @@ C1_to_C2 = W_to_C2 @ C1_to_W
 translation = C1_to_C2[:3, 3]
 print("Translation between camera 1 and camera 2:", translation)
 
+
+
+
+""" fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+center1 = np.transpose(-R1) @ tvec1
+center2 = np.transpose(-R2) @ tvec2
+center1 = center1.ravel()
+center2 = center2.ravel()
+
+distance = np.linalg.norm(center1 - center2)
+distance = distance * square_size
+print("Distance between cameras: ", distance)
+
+print("Center 1: ", center1)
+print("Center 2: ", center2)
+ax.scatter(center1[0], center1[1], center1[2], c='r', label='Camera 1')
+ax.scatter(center2[0], center2[1], center2[2], c='b', label='Camera 2')
+
+ax.text(center1[0], center1[1], center1[2], 'Camera 1', color='red')
+ax.text(center2[0], center2[1], center2[2], 'Camera 2', color='blue')
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.set_aspect('equal', adjustable='box')
+ax.legend()
+plt.show() """
 
 
 

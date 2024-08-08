@@ -1,6 +1,13 @@
 import pyrealsense2 as rs
 
-def post_process_depth_frame(depth_frame, min_distance=0, max_distance=3.0, decimation_magnitude = 1.0, spatial_magnitude = 2.0, spatial_smooth_alpha = 0.5, spatial_smooth_delta = 20, temporal_smooth_alpha = 0.4, temporal_smooth_delta = 20):
+def post_process_depth_frame(depth_frame, min_distance=0, max_distance=4, decimation_magnitude = 1.0, spatial_magnitude = 2.0, spatial_smooth_alpha = 0.5, spatial_smooth_delta = 20, temporal_smooth_alpha = 0.4, temporal_smooth_delta = 20, fill_hole = False):
+    """
+    Apply post processing filters to the depth frame of a RealSense camera.
+    More information about the filters can be found at:
+    - https://dev.intelrealsense.com/docs/post-processing-filters
+    - https://github.com/IntelRealSense/librealsense/blob/jupyter/notebooks/depth_filters.ipynb
+    - https://intelrealsense.github.io/librealsense/doxygen/namespacers2.html
+    """
     # Post processing possible only on the depth_frame
     assert (depth_frame.is_depth_frame())
 
@@ -32,7 +39,8 @@ def post_process_depth_frame(depth_frame, min_distance=0, max_distance=3.0, deci
     filtered_frame = spatial_filter.process(filtered_frame)
     filtered_frame = temporal_filter.process(filtered_frame)
     filtered_frame = disparity_to_depth.process(filtered_frame)
-    #filtered_frame = hole_filling.process(filtered_frame)
+    if fill_hole:
+        filtered_frame = hole_filling.process(filtered_frame)
     
     # Cast to depth_frame so that we can use the get_distance method afterwards
     depth_frame_filtered = filtered_frame.as_depth_frame()

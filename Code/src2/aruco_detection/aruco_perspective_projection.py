@@ -1,18 +1,9 @@
 import cv2
-from operator import itemgetter
 from glob import glob
 import matplotlib.pyplot as plt
 import numpy as np
 
-def clahe_sharpen(image):
-    lab = cv2.cvtColor(image, cv2.COLOR_BGR2Lab)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    cl = clahe.apply(l)
-    limg = cv2.merge((cl, a, b))
-    return cv2.cvtColor(limg, cv2.COLOR_Lab2BGR)
-
-path = "C:\\Users\\Robin\\Documents\\temp4.PNG"
+path = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\aruco_images\\perspective_projection_test.png"
 img = cv2.imread(path)
 # Coordinates that you want to Perspective Transform
 pts1 = np.float32([[115,19],[192,36],[95,89],[174,107]])
@@ -21,7 +12,11 @@ pts2 = np.float32([[0,0],[400,0],[0,400],[400,400]])
 
 M = cv2.getPerspectiveTransform(pts1,pts2)
 dst = cv2.warpPerspective(img, M, (400,400))
-dst = img
+cv2.imshow('Image', dst)
+
+################################
+# Attempt to enhance the image #
+################################
 
 # Where pixels are < 200, set to 0
 mask = dst <= 200
@@ -49,7 +44,7 @@ if ids is not None:
     print("Found Aruco marker with ID: ", ids[0][0])
     marker_id = ids[0][0]
     print("Marker ID: ", marker_id)
-    marker_size = 200  # Taille de l'image générée
+    marker_size = 200 
     aruco_marker_image = cv2.aruco.generateImageMarker(aruco_dict, marker_id, marker_size)
     cv2.imshow("Marker", aruco_marker_image)
 

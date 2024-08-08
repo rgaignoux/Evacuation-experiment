@@ -187,8 +187,6 @@ try:
                 m_height, m_center, m_area, m_match_found = value
                 if m_match_found:
                     continue
-
-                #print(f'Candidate: Head: {height:.2f} m, {center}, {area}, ID: {id}, {m_height:.2f} m, {m_center}, {m_area}')
                 
                 pos_diff = np.linalg.norm(np.array(m_center) - np.array(center))
                 area_diff = abs(m_area - area)

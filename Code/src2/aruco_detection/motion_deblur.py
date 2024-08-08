@@ -2,9 +2,9 @@ import numpy as np
 import cv2
 
 def blur_edge(img, d=31):
-    h, w  = img.shape[:2]
+    h, w = img.shape[:2]
     img_pad = cv2.copyMakeBorder(img, d, d, d, d, cv2.BORDER_WRAP)
-    img_blur = cv2.GaussianBlur(img_pad, (2*d+1, 2*d+1), -1)[d:-d,d:-d]
+    img_blur = cv2.GaussianBlur(img_pad, (2*d+1, 2*d+1), -1)[d:-d, d:-d]
     y, x = np.indices((h, w))
     dist = np.dstack([x, w-x-1, y, h-y-1]).min(-1)
     w = np.minimum(np.float32(dist)/d, 1.0)
@@ -15,77 +15,60 @@ def motion_kernel(angle, d, sz=65):
     c, s = np.cos(angle), np.sin(angle)
     A = np.float32([[c, -s, 0], [s, c, 0]])
     sz2 = sz // 2
-    A[:,2] = (sz2, sz2) - np.dot(A[:,:2], ((d-1)*0.5, 0))
+    A[:, 2] = (sz2, sz2) - np.dot(A[:, :2], ((d-1)*0.5, 0))
     kern = cv2.warpAffine(kern, A, (sz, sz), flags=cv2.INTER_CUBIC)
     return kern
 
-def defocus_kernel(d, sz=65):
-    kern = np.zeros((sz, sz), np.uint8)
-    cv2.circle(kern, (sz, sz), d, 255, -1, cv2.LINE_AA, shift=1)
-    kern = np.float32(kern) / 255.0
-    return kern
-
-
 if __name__ == '__main__':
+    fn = "C:\\Users\\Robin\\Documents\\Stage2024\\Code\\images\\color_images\\images\\color_frame_811.png"
 
-    import sys, getopt
-    opts, args = getopt.getopt(sys.argv[1:], '', ['circle', 'angle=', 'd=', 'snr='])
-    opts = dict(opts)
-    try:
-        fn = args[0]
-    except:
-        fn = '../data/licenseplate_motion.jpg'
+    img = cv2.imread(fn, 0)
+    img = np.float32(img) / 255.0
+    cv2.imshow('input', img)
+    
+    # Définir les valeurs par défaut pour les barres de défilement
+    ang = 135
+    d = 10
+    SNR = 15
 
     win = 'deconvolution'
 
-    img = cv2.imread(fn, 0)
-
-    img = np.float32(img)/255.0
-    cv2.imshow('input', img)
-
-    #img = blur_edge(img)
     IMG = cv2.dft(img, flags=cv2.DFT_COMPLEX_OUTPUT)
 
-    defocus = '--circle' in opts
-
     def update(_):
-        ang = np.deg2rad( cv2.getTrackbarPos('angle', win) )
+        ang = np.deg2rad(cv2.getTrackbarPos('angle', win))
         d = cv2.getTrackbarPos('d', win)
-        noise = 10**(-0.1*cv2.getTrackbarPos('SNR (db)', win))
+        noise = 10**(-0.1 * cv2.getTrackbarPos('SNR (db)', win))
 
-        if defocus:
-            psf = defocus_kernel(d)
-        else:
-            psf = motion_kernel(ang, d)
+        psf = motion_kernel(ang, d)
         cv2.imshow('psf', psf)
 
         psf /= psf.sum()
         psf_pad = np.zeros_like(img)
         kh, kw = psf.shape
         psf_pad[:kh, :kw] = psf
-        PSF = cv2.dft(psf_pad, flags=cv2.DFT_COMPLEX_OUTPUT, nonzeroRows = kh)
+        PSF = cv2.dft(psf_pad, flags=cv2.DFT_COMPLEX_OUTPUT, nonzeroRows=kh)
         PSF2 = (PSF**2).sum(-1)
-        iPSF = PSF / (PSF2 + noise)[...,np.newaxis]
+        iPSF = PSF / (PSF2 + noise)[..., np.newaxis]
         RES = cv2.mulSpectrums(IMG, iPSF, 0)
-        res = cv2.idft(RES, flags=cv2.DFT_SCALE | cv2.DFT_REAL_OUTPUT )
-        res = np.roll(res, -kh//2, 0)
-        res = np.roll(res, -kw//2, 1)
+        res = cv2.idft(RES, flags=cv2.DFT_SCALE | cv2.DFT_REAL_OUTPUT)
+        res = np.roll(res, -kh // 2, 0)
+        res = np.roll(res, -kw // 2, 1)      
 
-        cv2.imshow(win, res)
-        cv2.imwrite("C:\\Users\Robin\Documents\Stage2024\Code\images\color_images\\unblured_images\deconvolution.png",res*255)
-        
+        cv2.imshow('deconvolved', res)
 
     cv2.namedWindow(win)
-    cv2.namedWindow('psf', 0)
-    cv2.createTrackbar('angle', win, int(opts.get('--angle', 135)), 180, update)
-    cv2.createTrackbar('d', win, int(opts.get('--d', 22)), 50, update)
-    cv2.createTrackbar('SNR (db)', win, int(opts.get('--snr', 25)), 50, update)
+    # Création des trackbars
+    cv2.createTrackbar('angle', win, ang, 180, update)
+    cv2.createTrackbar('d', win, d, 50, update)
+    cv2.createTrackbar('SNR (db)', win, SNR, 50, update)
+    
+    # Appel initial de la fonction update pour afficher les images
     update(None)
 
     while True:
         ch = cv2.waitKey()
-        if ch == 27:
+        if ch == 27:  # Échapper pour quitter
             break
-        if ch == ord(' '):
-            defocus = not defocus
+        if ch == ord(' '):  # Espaces pour mettre à jour l'image
             update(None)
