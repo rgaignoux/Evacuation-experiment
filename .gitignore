@@ -21,3 +21,7 @@ Code/*
 
 # Ne pas ignorer tous les dossiers et fichiers dans Code/src2
 !Code/src2/**
+
+!Code/src/body_scan/
+
+!Code/src/body_scan/**
