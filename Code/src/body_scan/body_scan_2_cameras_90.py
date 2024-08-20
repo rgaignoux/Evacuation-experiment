@@ -7,7 +7,7 @@ import time
 import utils
 
 # Read angles values from rotation_90.txt
-filename = 'rotation_90.txt'
+filename = 'calibration_results\\rotation_90.txt'
 with open(filename) as file:
     lines = [line.rstrip() for line in file]
 
@@ -22,8 +22,8 @@ def crop_body(pcd, center, angle):
     # Get the body bounding box
     entire_bbox = pcd.get_axis_aligned_bounding_box()
 
-    center_bbox_min = center - np.array([0.4, 0, 0.4])
-    center_bbox_max = center + np.array([0.4, 0, 0.4])
+    center_bbox_min = center - np.array([0.5, 0, 0.5])
+    center_bbox_max = center + np.array([0.5, 0, 0.5])
 
     # Compute y_min as the first percentile in case the actual min_bound is an outlier
     y_values = np.asarray(pcd.points)[:, 1]
@@ -53,13 +53,16 @@ if capture:
     utils.save_ply("front.ply", front_pipe)
     utils.save_ply("side.ply", side_pipe)
 
+front_path = "C:\\Users\\Robin\\Documents\\Stage2024\\Code\\body_scans\\2_cameras_90\\backpack_in_hands\\front.ply"
+side_path = "C:\\Users\\Robin\\Documents\\Stage2024\\Code\\body_scans\\2_cameras_90\\backpack_in_hands\\side.ply"
+
 # Load front point cloud
-pcd_front = o3d.io.read_point_cloud("front.ply")
-pcd_front = pcd_front.uniform_down_sample(every_k_points=5)
+pcd_front = o3d.io.read_point_cloud(front_path)
+pcd_front = pcd_front.voxel_down_sample(voxel_size=0.012)
 
 # Load side point cloud
-pcd_side = o3d.io.read_point_cloud("side.ply")
-pcd_side = pcd_side.uniform_down_sample(every_k_points=5)
+pcd_side = o3d.io.read_point_cloud(side_path)
+pcd_side = pcd_side.voxel_down_sample(voxel_size=0.012)
 
 # Crop the body
 front_body_center = np.array([0, 0, -1.5]) # Center of the body : computed manually by pressing shift + left click in the visualization window

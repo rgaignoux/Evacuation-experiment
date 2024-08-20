@@ -51,7 +51,6 @@ def select_file():
 
 # Read the bag file
 bag_file = select_file()
-bag_file = bag_file.replace('\\', '\\\\')
 
 pipe = rs.pipeline()
 cfg = rs.config()

@@ -81,4 +81,4 @@ def main(image_path):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-main('C:\\Users\\Robin\\Documents\\Stage2024\\Code\\images\\color_images\\images\\color_frame_811.png')
+main('deblurred.png')

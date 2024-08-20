@@ -4,7 +4,11 @@ import pyrealsense2 as rs
 import tkinter as tk
 from tkinter import filedialog
 import cv2
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.spatial.transform import Rotation as R
+from concave_hull import concave_hull, concave_hull_indexes
 
 def select_file():
     root = tk.Tk()
@@ -37,9 +41,9 @@ def project_to_xy_plane(pcd):
     # Update point cloud with new points
     pcd.points = o3d.utility.Vector3dVector(points)
 
-    # Remove outliers
+    """ # Remove outliers
     cl, ind = pcd.remove_radius_outlier(nb_points=16, radius=0.03)
-    pcd = pcd.select_by_index(ind)
+    pcd = pcd.select_by_index(ind) """
     
     return pcd
 
@@ -54,11 +58,64 @@ def project_to_xz_plane(pcd):
     # Update point cloud with new points
     pcd.points = o3d.utility.Vector3dVector(points)
 
-    # Remove outliers
+    """ # Remove outliers
     cl, ind = pcd.remove_radius_outlier(nb_points=16, radius=0.03)
-    pcd = pcd.select_by_index(ind)
+    pcd = pcd.select_by_index(ind) """
     
     return pcd
+
+
+def get_body_contour(points_2d, save_path="body_projection.png"):
+    # Slider update function
+    def update(val):
+        length_threshold = slider.val
+        idxes = concave_hull_indexes(points_2d, length_threshold=length_threshold)
+        vertices = points_2d[idxes]
+
+        ax.clear()
+        ax.plot(points_2d[:, 0], points_2d[:, 1], '.', label='Points')
+        ax.plot(vertices[:, 0], vertices[:, 1], 'r-', label='Body contour', linewidth=5)
+        ax.set_xlabel('X')
+        ax.set_ylabel('Z')
+        ax.axis('equal')
+        ax.legend()
+        fig.canvas.draw_idle()
+
+        # Compute X and Z lengths
+        x_length = np.max(vertices[:, 0]) - np.min(vertices[:, 0])
+        z_length = np.max(vertices[:, 1]) - np.min(vertices[:, 1])
+        
+        print("X length:", x_length)
+        print("Z length:", z_length)
+        
+        # Save the image after each update
+        fig.savefig(save_path)
+        print(f"Image saved to {save_path}")
+
+    # Create tkinter window to create a slider
+    root = tk.Tk()
+    root.title("Concave Hull Slider")
+
+    # Initial plot
+    fig, ax = plt.subplots()
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.get_tk_widget().pack()
+    ax.plot(points_2d[:, 0], points_2d[:, 1], '.', label='Points')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Z')
+    ax.axis('equal')
+    ax.legend()
+
+    # Add margin at the bottom for the slider
+    plt.subplots_adjust(bottom=0.25)
+
+    # Create the slider
+    slider_ax = plt.axes([0.25, 0.02, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+    slider = Slider(slider_ax, 'Length Threshold', 0.01, 1.0, valinit=0.15, valstep=0.01)
+    slider.on_changed(update)
+
+    canvas.draw()
+    root.mainloop()
 
 
 # Camera settings
@@ -113,8 +170,8 @@ def create_pipeline_IR(serial_number, width, height, fps):
     # Use Medium Density preset
     depth_sensor.set_option(rs.option.visual_preset, 5)
 
-    # Set manual exposure to 5000
-    depth_sensor.set_option(rs.option.exposure, 5000)
+    # Set manual exposure to 8500
+    depth_sensor.set_option(rs.option.exposure, 8500)
 
     # Get instrinsics
     instrinsics = rs.video_stream_profile(profile.get_stream(rs.stream.depth)).get_intrinsics()
@@ -222,6 +279,36 @@ def get_inverse_homogenous(R, t):
     return T
 
 
+def draw_axes(img, origin, xyz_axes):
+    origin = tuple(origin.ravel().astype(int))
+    x = tuple(xyz_axes[0].ravel().astype(int))
+    y = tuple(xyz_axes[1].ravel().astype(int))
+    z = tuple(xyz_axes[2].ravel().astype(int))
+
+    img = cv2.line(img, origin, x, (255,0,0), 5)
+    img = cv2.line(img, origin, y, (0,255,0), 5)
+    img = cv2.line(img, origin, z, (0,0,255), 5)
+    return img
+
+
+def visualize_axes(img, origin, rvec, tvec, cameraMatrix, distCoeffs):
+    # Project the axes
+    axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
+    xyz_axes, _ = cv2.projectPoints(axis, rvec, tvec, cameraMatrix, distCoeffs)
+    img = draw_axes(img, origin, xyz_axes)
+    return img
+
+
+def draw_corners_and_axes(img, corners, rvec, tvec, cameraMatrix, distCoeffs):
+    # Draw the corners
+    img = cv2.drawChessboardCorners(img, (9,6), corners, True)
+
+    # Draw the axes
+    origin = corners[0].ravel()
+    img = visualize_axes(img, origin, rvec, tvec, cameraMatrix, distCoeffs)
+    return img
+
+
 def get_extrinsics(path_IR, pattern_size, cameraMatrix, distCoeffs):
     img = cv2.imread(path_IR, cv2.IMREAD_GRAYSCALE)
 
@@ -239,14 +326,11 @@ def get_extrinsics(path_IR, pattern_size, cameraMatrix, distCoeffs):
     # Compute the extrinsics parameters using solvePnP
     _, rvec, tvec = cv2.solvePnP(objp, corners, cameraMatrix, distCoeffs)
 
-    return rvec, tvec
+    # Draw the corners and the axes
+    img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    img_color = draw_corners_and_axes(img_color, corners, rvec, tvec, cameraMatrix, distCoeffs)
 
-
-def get_adjacent_angle_90(angle):
-    if angle >= 0:
-        return 90 - angle
-    else:
-        return -(90 + angle)
+    return rvec, tvec, img_color
     
 
 def get_instrinsics_matrix(intrinsics):

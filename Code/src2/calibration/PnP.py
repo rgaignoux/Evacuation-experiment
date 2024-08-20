@@ -45,11 +45,10 @@ square_size = 6
 # Chessboard points in object coordinate system
 objp = np.zeros((np.prod(pattern_size), 3), dtype=np.float32)
 objp[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
-axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
 
 # Load images
-path1 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\angles_test\\1.png"
-path2 = "C:\\Users\\Robin\\Documents\\Stage2024\\Dataset\\realsense_calibration_matrix\\angles_test\\2.png"
+path1 = "back.png"
+path2 = "front.png"
 img1 = cv2.imread(path1, cv2.IMREAD_GRAYSCALE)
 img2 = cv2.imread(path2, cv2.IMREAD_GRAYSCALE)
 
@@ -66,6 +65,7 @@ _, rvec1, tvec1 = cv2.solvePnP(objp, corners1, cameraMatrix1, distCoeffs1)
 _, rvec2, tvec2 = cv2.solvePnP(objp, corners2, cameraMatrix2, distCoeffs2)
 
 # Visualize the chessboard corners and the axes
+axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
 xyz_axes_img1, _ = cv2.projectPoints(axis, rvec1, tvec1, cameraMatrix1, distCoeffs1)
 xyz_axes_img2, _ = cv2.projectPoints(axis, rvec2, tvec2, cameraMatrix2, distCoeffs2)
 img1_copy = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)

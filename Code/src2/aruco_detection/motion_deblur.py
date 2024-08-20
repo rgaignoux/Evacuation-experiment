@@ -20,7 +20,7 @@ def motion_kernel(angle, d, sz=65):
     return kern
 
 if __name__ == '__main__':
-    fn = "C:\\Users\\Robin\\Documents\\Stage2024\\Code\\images\\color_images\\images\\color_frame_811.png"
+    fn = "C:\\Users\\Robin\\Documents\\Stage2024\\Code\\images\\color_images\\motion_blur\\motion_blur929.png"
 
     img = cv2.imread(fn, 0)
     img = np.float32(img) / 255.0
@@ -56,6 +56,7 @@ if __name__ == '__main__':
         res = np.roll(res, -kw // 2, 1)      
 
         cv2.imshow('deconvolved', res)
+        cv2.imwrite("deblurred.png", res*255)
 
     cv2.namedWindow(win)
     # Création des trackbars

@@ -77,11 +77,12 @@ playback = profile.get_device().as_playback()
 playback.set_real_time(False) # False: no frame drop
 colorizer = rs.colorizer(2)
 wait_key = 1
-frame_shape = (848, 480)
+frames = pipe.wait_for_frames()
+depth_frame = frames.get_depth_frame()
+frame_shape = (depth_frame.get_width(), depth_frame.get_height())
 
 # Background mask
-background = np.ones((480, 848), np.uint8) * 1
-cv2.rectangle(background,(0,0),(210,250), 0,-1)
+background = np.ones(frame_shape[::-1], np.uint8)
 
 # Ids of the heads
 heads_id = {}
@@ -134,7 +135,7 @@ try:
                         distance = depth_frame.get_distance(i, j)
                         height = 2.67 - distance
 
-                        if 1.5 < height < 2.0 and height > max_height:
+                        if 1.0 < height < 2.5 and height > max_height:
                             max_height = height
                             min_distance = distance
 
